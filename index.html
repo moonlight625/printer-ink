@@ -247,6 +247,17 @@
       <div class="hint" id="volumeNote"></div>
     </div>
 
+    <div class="freq">
+      <div class="freq-q">③ 何年くらいお使いになりますか？</div>
+      <div class="freq-note">プリンターの寿命は5年くらいが目安です。買い替えまでの年数で比べます。</div>
+      <div class="freq-inputs">
+        <span class="freq-unit">
+          <input type="number" id="useYears" value="5" min="1" max="30" step="1" inputmode="numeric">
+          <span class="unit">年</span>
+        </span>
+      </div>
+    </div>
+
     <div class="actions">
       <button class="ghost" id="resetBtn" type="button">初期値に戻す</button>
     </div>
@@ -280,6 +291,7 @@
     <li>印刷枚数は「基準の機種でのインク購入ペース × 1セットの印刷可能枚数」から年間枚数を求め、同じ枚数を各機種で印刷した場合のインク代を比べています。</li>
     <li>本体に付属するインクの分は計算に含めていません（実際は大容量インクの機種が、さらに有利になります）。</li>
     <li>印刷可能枚数はカタログ値です。写真印刷が多い場合など、使い方によって実際の枚数は変わります。</li>
+    <li>「逆転するまでの年数」は使用年数とは関係なく計算しています。逆転が使用年数より後になる場合は、総額の欄で割高と出ます。</li>
   </ul>
 
 </div>
@@ -299,6 +311,7 @@
     { name: "カートリッジ",    body: 15800, ink:  5000, pages:  800, slot: 2, base: true  }
   ];
   var DEFAULT_PER_YEAR = 1;
+  var DEFAULT_USE_YEARS = 5;   // プリンターの寿命の目安
 
   var machines = [];
   var uid = 0;
@@ -332,6 +345,12 @@
     return "1年に約" + (perYear >= 10 ? Math.round(perYear) : perYear.toFixed(1)) + "回";
   };
   var color = function (m) { return "var(--s" + m.slot + ")"; };
+  // 何年使うか（1〜30年）
+  function useYears() {
+    var v = parseFloat(document.getElementById("useYears").value);
+    if (!isFinite(v) || v < 1) return 1;
+    return Math.min(30, v);
+  }
 
   function loadDefaults() {
     machines = DEFAULTS.map(function (d) {
@@ -438,8 +457,9 @@
       } else {
         var lab = yearsLabel(m.breakeven);
         num = "約 " + lab.main + '<span class="u">' + lab.unit + "</span>";
-        var ten = base.total(10) - m.total(10);
-        sub = "10年使うと " + (ten >= 0 ? yen(ten) + " お得" : yen(-ten) + " 割高");
+        var uy = useYears();
+        var diff = base.total(uy) - m.total(uy);
+        sub = uy + "年使うと " + (diff >= 0 ? yen(diff) + " お得" : yen(-diff) + " 割高");
       }
       return '<div class="verdict' + na + '" style="border-color:' + color(m) + '33">' +
         '<div class="verdict-name"><span class="swatch" style="background:' + color(m) + '"></span>' + esc(m.name) + "</div>" +
@@ -448,15 +468,16 @@
       "</div>";
     }).join("");
 
-    // 10年後の総額
-    var sorted = machines.slice().sort(function (a, b) { return a.total(10) - b.total(10); });
+    // 使用年数の時点での総額
+    var uy = useYears();
+    var sorted = machines.slice().sort(function (a, b) { return a.total(uy) - b.total(uy); });
     var best = sorted[0];
-    el("totals").innerHTML = '<div class="total-head">10年使ったときの総額</div>' +
+    el("totals").innerHTML = '<div class="total-head">' + uy + '年使ったときの総額</div>' +
       sorted.map(function (m) {
-        var gap = m.total(10) - best.total(10);
+        var gap = m.total(uy) - best.total(uy);
         return '<div class="total-row' + (m === best ? " cheapest" : "") + '">' +
           '<span class="nm"><span class="swatch" style="background:' + color(m) + '"></span>' + esc(m.name) + "</span>" +
-          '<span class="val">' + yen(m.total(10)) + "</span>" +
+          '<span class="val">' + yen(m.total(uy)) + "</span>" +
           '<span class="gap">' + (gap > 0 ? "+" + yen(gap) : "—") + "</span>" +
         "</div>";
       }).join("");
@@ -495,13 +516,14 @@
     while (svg.childNodes.length > 1) { svg.removeChild(svg.lastChild); }
 
     var list = others();
-    var xMax = 10;
+    var uy = useYears();
+    var xMax = Math.max(uy * 1.15, 5);
     list.forEach(function (m) {
       if (m.breakeven && m.breakeven > 0 && m.breakeven <= 30) {
-        xMax = Math.max(xMax, Math.ceil(m.breakeven * 1.6));
+        xMax = Math.max(xMax, m.breakeven * 1.15);
       }
     });
-    if (xMax > 30) xMax = 30;
+    xMax = Math.min(30, Math.ceil(xMax));
 
     var top = 1;
     machines.forEach(function (m) { top = Math.max(top, m.total(xMax)); });
@@ -531,6 +553,24 @@
       x1: plot.x, y1: plot.y + plot.h, x2: plot.x + plot.w, y2: plot.y + plot.h,
       stroke: "var(--axis)", "stroke-width": 1
     }));
+
+    // 使用年数より先は「使わない期間」として薄くする
+    if (uy < xMax) {
+      svg.appendChild(svgEl("rect", {
+        x: X(uy), y: plot.y, width: plot.x + plot.w - X(uy), height: plot.h,
+        fill: "var(--grid)", opacity: .5
+      }));
+    }
+    svg.appendChild(svgEl("line", {
+      x1: X(uy), y1: plot.y, x2: X(uy), y2: plot.y + plot.h,
+      stroke: "var(--axis)", "stroke-width": 1.5
+    }));
+    var uyl = svgEl("text", {
+      x: X(uy) - 7, y: plot.y + 12, "text-anchor": "end",
+      fill: "var(--ink-muted)", "font-size": 11.5, "font-weight": 600
+    });
+    uyl.textContent = "ここまで使う";
+    svg.appendChild(uyl);
 
     // 比較機種が1つだけなら、逆転位置に縦線とラベルを出す
     var solo = list.length === 1 && list[0].status === "ok" && list[0].breakeven < xMax ? list[0] : null;
@@ -645,12 +685,15 @@
     tbl.querySelector("thead").innerHTML = "<tr><th>経過年数</th>" +
       machines.map(function (m) { return "<th>" + esc(m.name) + "</th>"; }).join("") + "</tr>";
     var rows = [];
-    for (var t = 0; t <= 10; t++) {
+    var uy = Math.round(useYears());
+    var step = uy > 15 ? 2 : 1;
+    for (var t = 0; t <= uy; t += step) {
       var vals = machines.map(function (m) { return m.total(t); });
       var min = Math.min.apply(null, vals);
       rows.push("<tr><td>" + (t === 0 ? "購入時" : t + "年後") + "</td>" +
         vals.map(function (v) { return '<td class="' + (v === min ? "best" : "") + '">' + yen(v) + "</td>"; }).join("") +
       "</tr>");
+      if (t < uy && t + step > uy) t = uy - step;   // 最終年は必ず出す
     }
     tbl.querySelector("tbody").innerHTML = rows.join("");
   }
@@ -707,6 +750,7 @@
     loadDefaults();
     el("perYear").value = DEFAULT_PER_YEAR;
     el("everyYears").value = +(1 / DEFAULT_PER_YEAR).toFixed(2);
+    el("useYears").value = DEFAULT_USE_YEARS;
     renderMachines();
     update();
   });
@@ -721,6 +765,8 @@
     el("perYear").value = (isFinite(v) && v > 0) ? +(1 / v).toFixed(2) : "";
     update();
   });
+
+  el("useYears").addEventListener("input", update);
 
   el("tableBtn").addEventListener("click", function () {
     var wrap = el("tableWrap"), open = wrap.hidden;

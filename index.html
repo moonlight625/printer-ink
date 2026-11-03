@@ -1,0 +1,780 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>エコタンク vs カートリッジ 費用シミュレーター</title>
+<style>
+  :root {
+    color-scheme: light;
+    --plane:          #f9f9f7;
+    --surface:        #fcfcfb;
+    --ink:            #0b0b0b;
+    --ink-2:          #52514e;
+    --ink-muted:      #898781;
+    --grid:           #e1e0d9;
+    --axis:           #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --eco:            #2a78d6;  /* 系列1 blue */
+    --cart:           #eb6834;  /* 系列2 orange */
+    --good:           #0ca30c;
+    --good-ink:       #006300;
+    --warn:           #fab219;
+    --field:          #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --plane:        #0d0d0d;
+      --surface:      #1a1a19;
+      --ink:          #ffffff;
+      --ink-2:        #c3c2b7;
+      --ink-muted:    #898781;
+      --grid:         #2c2c2a;
+      --axis:         #383835;
+      --border:       rgba(255,255,255,0.10);
+      --eco:          #3987e5;
+      --cart:         #d95926;
+      --good:         #0ca30c;
+      --good-ink:     #0ca30c;
+      --warn:         #fab219;
+      --field:        #232322;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 20px 16px 64px;
+    background: var(--plane);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; }
+
+  h1 {
+    font-size: 1.3rem;
+    letter-spacing: .01em;
+    margin: 0 0 4px;
+  }
+  .lede { color: var(--ink-2); font-size: .9rem; margin: 0 0 24px; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .card > h2 {
+    font-size: .8rem;
+    font-weight: 700;
+    letter-spacing: .08em;
+    color: var(--ink-muted);
+    text-transform: none;
+    margin: 0 0 16px;
+  }
+
+  /* ---- 入力 ---- */
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 680px) { .cols { grid-template-columns: 1fr; } }
+
+  .machine { border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .machine-head {
+    display: flex; align-items: center; gap: 8px;
+    font-weight: 700; font-size: 1rem; margin-bottom: 14px;
+  }
+  .swatch { width: 14px; height: 14px; border-radius: 4px; flex: none; }
+  .swatch.eco  { background: var(--eco); }
+  .swatch.cart { background: var(--cart); }
+
+  .field { margin-bottom: 12px; }
+  .field:last-child { margin-bottom: 0; }
+  .field label {
+    display: block;
+    font-size: .8rem;
+    color: var(--ink-2);
+    margin-bottom: 4px;
+  }
+  .inputline { display: flex; align-items: center; gap: 6px; }
+  input[type=number] {
+    flex: 1 1 auto;
+    min-width: 0;
+    font: inherit;
+    font-size: 1.05rem;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    padding: 8px 10px;
+    border: 1px solid var(--axis);
+    border-radius: 8px;
+    background: var(--field);
+    color: var(--ink);
+  }
+  input[type=number]:focus { outline: 2px solid var(--eco); outline-offset: 1px; }
+  .unit { font-size: .85rem; color: var(--ink-2); flex: none; }
+  .hint { font-size: .75rem; color: var(--ink-muted); margin-top: 3px; }
+
+  /* 購入頻度 */
+  .freq { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .freq-q { font-weight: 700; margin-bottom: 4px; }
+  .freq-note { font-size: .8rem; color: var(--ink-2); margin-bottom: 12px; }
+  .freq-inputs { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .freq-unit { display: flex; align-items: center; gap: 6px; }
+  .freq-unit input { width: 92px; flex: none; }
+  .freq-or { color: var(--ink-muted); font-size: .85rem; }
+
+  .actions { margin-top: 16px; }
+  button.reset {
+    font: inherit; font-size: .85rem;
+    padding: 7px 14px;
+    border: 1px solid var(--axis);
+    border-radius: 8px;
+    background: var(--field);
+    color: var(--ink-2);
+    cursor: pointer;
+  }
+  button.reset:hover { color: var(--ink); }
+
+  /* ---- 結果 ---- */
+  .hero { text-align: center; padding: 8px 0 4px; }
+  .hero-label { font-size: .9rem; color: var(--ink-2); }
+  .hero-num {
+    font-size: clamp(2.4rem, 8vw, 3.6rem);
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -.01em;
+    margin: 2px 0;
+  }
+  .hero-num .u { font-size: .45em; font-weight: 600; margin: 0 .08em 0 .02em; }
+  .hero-sub { font-size: .9rem; color: var(--ink-2); }
+  .hero.na .hero-num { font-size: clamp(1.3rem, 4.5vw, 1.8rem); }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    margin-top: 20px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  @media (max-width: 680px) { .stats { grid-template-columns: 1fr; } }
+  .stat { background: var(--surface); padding: 14px 16px; }
+  .stat-k { font-size: .78rem; color: var(--ink-2); }
+  .stat-v {
+    font-size: 1.25rem; font-weight: 700; line-height: 1.3;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-note { font-size: .75rem; color: var(--ink-muted); }
+  .good { color: var(--good-ink); }
+
+  /* ---- グラフ ---- */
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 10px; }
+  .legend-item { display: flex; align-items: center; gap: 7px; font-size: .85rem; color: var(--ink-2); }
+  .legend-line { width: 18px; height: 2px; border-radius: 1px; flex: none; }
+
+  .chart-box { position: relative; }
+  svg { display: block; width: 100%; height: auto; touch-action: pan-y; }
+  .tip {
+    position: absolute;
+    pointer-events: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    box-shadow: 0 3px 12px rgba(0,0,0,.14);
+    border-radius: 10px;
+    padding: 9px 12px;
+    font-size: .82rem;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity .1s;
+    z-index: 3;
+  }
+  .tip.on { opacity: 1; }
+  .tip-h { font-weight: 700; margin-bottom: 5px; color: var(--ink); }
+  .tip-row { display: flex; align-items: center; gap: 7px; color: var(--ink-2); }
+  .tip-row b { color: var(--ink); font-variant-numeric: tabular-nums; margin-left: auto; padding-left: 12px; }
+  .tip-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+
+  /* ---- 表 ---- */
+  .toggle {
+    font: inherit; font-size: .85rem;
+    margin-top: 14px; padding: 7px 14px;
+    border: 1px solid var(--axis); border-radius: 8px;
+    background: var(--field); color: var(--ink-2); cursor: pointer;
+  }
+  .table-wrap { overflow-x: auto; margin-top: 14px; }
+  table { border-collapse: collapse; width: 100%; font-size: .85rem; }
+  th, td {
+    padding: 7px 12px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  th { color: var(--ink-2); font-weight: 600; text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  tr.cross td { background: color-mix(in srgb, var(--good) 12%, transparent); font-weight: 700; }
+  [hidden] { display: none !important; }
+
+  .foot { font-size: .75rem; color: var(--ink-muted); margin-top: 20px; }
+  .foot li { margin-bottom: 3px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>エコタンク vs カートリッジ</h1>
+  <p class="lede">本体価格とインク代、お客様のインク購入ペースを入れると、累計費用が逆転する時期を計算します。</p>
+
+  <!-- ===== 入力 ===== -->
+  <div class="card">
+    <h2>① 機種の情報を入れる</h2>
+    <div class="cols">
+
+      <div class="machine">
+        <div class="machine-head"><span class="swatch eco"></span>エコタンク（インクボトル）</div>
+        <div class="field">
+          <label for="ecoBody">本体価格</label>
+          <div class="inputline">
+            <input type="number" id="ecoBody" value="39800" min="0" step="100" inputmode="numeric">
+            <span class="unit">円</span>
+          </div>
+        </div>
+        <div class="field">
+          <label for="ecoInk">インク全色セット価格</label>
+          <div class="inputline">
+            <input type="number" id="ecoInk" value="4500" min="0" step="100" inputmode="numeric">
+            <span class="unit">円</span>
+          </div>
+        </div>
+        <div class="field">
+          <label for="ecoPages">1セットで印刷できる枚数</label>
+          <div class="inputline">
+            <input type="number" id="ecoPages" value="6000" min="1" step="100" inputmode="numeric">
+            <span class="unit">枚</span>
+          </div>
+          <div class="hint">カタログの「印刷可能枚数」（カラー基準）</div>
+        </div>
+      </div>
+
+      <div class="machine">
+        <div class="machine-head"><span class="swatch cart"></span>カートリッジ（従来タイプ）</div>
+        <div class="field">
+          <label for="cartBody">本体価格</label>
+          <div class="inputline">
+            <input type="number" id="cartBody" value="15800" min="0" step="100" inputmode="numeric">
+            <span class="unit">円</span>
+          </div>
+        </div>
+        <div class="field">
+          <label for="cartInk">インク全色セット価格</label>
+          <div class="inputline">
+            <input type="number" id="cartInk" value="5000" min="0" step="100" inputmode="numeric">
+            <span class="unit">円</span>
+          </div>
+        </div>
+        <div class="field">
+          <label for="cartPages">1セットで印刷できる枚数</label>
+          <div class="inputline">
+            <input type="number" id="cartPages" value="800" min="1" step="50" inputmode="numeric">
+            <span class="unit">枚</span>
+          </div>
+          <div class="hint">カタログの「印刷可能枚数」（カラー基準）</div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="freq">
+      <div class="freq-q">② インクはどのくらいの頻度で買われますか？</div>
+      <div class="freq-note">今お使いのカートリッジ機での全色セット購入ペースを、どちらかに入力してください（連動します）。</div>
+      <div class="freq-inputs">
+        <span class="freq-unit">
+          <span class="unit">1年に</span>
+          <input type="number" id="perYear" value="1" min="0" step="0.1" inputmode="decimal">
+          <span class="unit">回</span>
+        </span>
+        <span class="freq-or">または</span>
+        <span class="freq-unit">
+          <input type="number" id="everyYears" value="1" min="0" step="0.1" inputmode="decimal">
+          <span class="unit">年に1回</span>
+        </span>
+      </div>
+      <div class="hint" id="volumeNote"></div>
+    </div>
+
+    <div class="actions">
+      <button class="reset" id="resetBtn" type="button">初期値に戻す</button>
+    </div>
+  </div>
+
+  <!-- ===== 結果 ===== -->
+  <div class="card">
+    <h2>結果</h2>
+    <div class="hero" id="hero">
+      <div class="hero-label">エコタンクの方が安くなるのは</div>
+      <div class="hero-num" id="heroNum">—</div>
+      <div class="hero-sub" id="heroSub"></div>
+    </div>
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-k">本体価格の差（エコタンクが高い分）</div>
+        <div class="stat-v" id="sBody">—</div>
+        <div class="stat-note" id="sBodyNote"></div>
+      </div>
+      <div class="stat">
+        <div class="stat-k">1年あたりのインク代</div>
+        <div class="stat-v" id="sInk">—</div>
+        <div class="stat-note" id="sInkNote"></div>
+      </div>
+      <div class="stat">
+        <div class="stat-k">10年使ったときの差</div>
+        <div class="stat-v" id="sTen">—</div>
+        <div class="stat-note" id="sTenNote"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== グラフ ===== -->
+  <div class="card">
+    <h2>累計費用の推移（本体＋インク代）</h2>
+    <div class="legend">
+      <span class="legend-item"><span class="legend-line" style="background:var(--eco)"></span>エコタンク</span>
+      <span class="legend-item"><span class="legend-line" style="background:var(--cart)"></span>カートリッジ</span>
+    </div>
+    <div class="chart-box" id="chartBox">
+      <svg id="chart" viewBox="0 0 760 380" role="img" aria-labelledby="chartTitle">
+        <title id="chartTitle">エコタンクとカートリッジの累計費用の比較グラフ</title>
+      </svg>
+      <div class="tip" id="tip"></div>
+    </div>
+    <button class="toggle" id="tableBtn" type="button" aria-expanded="false">数値の表を見る</button>
+    <div class="table-wrap" id="tableWrap" hidden>
+      <table id="costTable">
+        <thead>
+          <tr><th>経過年数</th><th>エコタンク累計</th><th>カートリッジ累計</th><th>差額</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <ul class="foot">
+    <li>印刷枚数は「カートリッジ機でのインク購入ペース × 1セットの印刷可能枚数」から年間枚数を求め、同じ枚数をエコタンクで印刷した場合のインク代を比べています。</li>
+    <li>本体に付属するインクの分は計算に含めていません（実際はエコタンクの方が、さらに有利になります）。</li>
+    <li>印刷可能枚数はカタログ値です。写真印刷が多い場合など、使い方によって実際の枚数は変わります。</li>
+  </ul>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var DEFAULTS = {
+    ecoBody: 39800, ecoInk: 4500, ecoPages: 6000,
+    cartBody: 15800, cartInk: 5000, cartPages: 800,
+    perYear: 1
+  };
+
+  var el = function (id) { return document.getElementById(id); };
+  var ids = ["ecoBody", "ecoInk", "ecoPages", "cartBody", "cartInk", "cartPages", "perYear", "everyYears"];
+  var inputs = {};
+  ids.forEach(function (id) { inputs[id] = el(id); });
+
+  var yen = function (n) {
+    return "¥" + Math.round(n).toLocaleString("ja-JP");
+  };
+  // 軸ラベル用のざっくり表記（0 / 2.5万 / 5万 …）
+  var yenShort = function (n) {
+    if (n === 0) return "0";
+    if (n >= 10000) {
+      var man = n / 10000;
+      return (Math.abs(man - Math.round(man)) < 0.05 ? Math.round(man) : man.toFixed(1)) + "万";
+    }
+    return Math.round(n).toLocaleString("ja-JP");
+  };
+  var num = function (id) {
+    var v = parseFloat(inputs[id].value);
+    return isFinite(v) && v >= 0 ? v : 0;
+  };
+  // 年数 → 「3年5ヶ月」
+  var yearsLabel = function (t) {
+    var y = Math.floor(t + 1e-9);
+    var m = Math.round((t - y) * 12);
+    if (m >= 12) { y += 1; m = 0; }
+    if (y === 0) return { main: String(m), unit: "ヶ月" };
+    if (m === 0) return { main: String(y), unit: "年" };
+    return { main: y + "年" + m, unit: "ヶ月" };
+  };
+  // 期間の言い回し（エコタンクのインク購入ペース）
+  var paceLabel = function (perYear) {
+    if (!(perYear > 0)) return "インクの購入なし";
+    var every = 1 / perYear;
+    if (every >= 1.1) return "約" + (every >= 10 ? Math.round(every) : every.toFixed(1)) + "年に1回";
+    return "1年に約" + (perYear >= 10 ? Math.round(perYear) : perYear.toFixed(1)) + "回";
+  };
+
+  // ===== 計算 =====
+  function compute() {
+    var ecoBody = num("ecoBody"), ecoInk = num("ecoInk"), ecoPages = num("ecoPages");
+    var cartBody = num("cartBody"), cartInk = num("cartInk"), cartPages = num("cartPages");
+    var cartPerYear = num("perYear");
+
+    var valid = ecoPages > 0 && cartPages > 0;
+    // 年間印刷枚数（カートリッジ機での購入ペースから逆算）
+    var pagesPerYear = cartPages * cartPerYear;
+    // 同じ枚数をエコタンクで刷ったときの年間セット数
+    var ecoPerYear = valid ? pagesPerYear / ecoPages : 0;
+
+    var ecoYearly = ecoInk * ecoPerYear;     // 年間インク代（エコタンク）
+    var cartYearly = cartInk * cartPerYear;  // 年間インク代（カートリッジ）
+    var bodyGap = ecoBody - cartBody;        // 本体の価格差
+    var yearlyGap = cartYearly - ecoYearly;  // 1年あたり取り戻せる額
+
+    var breakeven = null;                    // 逆転までの年数
+    var status = "ok";
+    if (bodyGap <= 0) {
+      status = yearlyGap >= 0 ? "already" : "already";
+      breakeven = 0;
+    } else if (yearlyGap <= 0) {
+      status = "never";
+    } else {
+      breakeven = bodyGap / yearlyGap;
+      if (breakeven > 30) status = "far";
+    }
+    if (!valid) status = "invalid";
+
+    return {
+      valid: valid, status: status, breakeven: breakeven,
+      ecoBody: ecoBody, cartBody: cartBody, bodyGap: bodyGap,
+      ecoYearly: ecoYearly, cartYearly: cartYearly, yearlyGap: yearlyGap,
+      ecoPerYear: ecoPerYear, cartPerYear: cartPerYear,
+      pagesPerYear: pagesPerYear, ecoPages: ecoPages,
+      ecoTotal: function (t) { return ecoBody + ecoYearly * t; },
+      cartTotal: function (t) { return cartBody + cartYearly * t; }
+    };
+  }
+
+  // ===== 結果カード =====
+  function renderResult(r) {
+    var hero = el("hero"), heroNum = el("heroNum"), heroSub = el("heroSub");
+    hero.classList.remove("na");
+
+    if (r.status === "invalid") {
+      hero.classList.add("na");
+      heroNum.textContent = "印刷できる枚数を入力してください";
+      heroSub.textContent = "両方の「1セットで印刷できる枚数」が必要です。";
+    } else if (r.status === "never") {
+      hero.classList.add("na");
+      heroNum.textContent = "この条件では元が取れません";
+      heroSub.textContent = "エコタンクの1年あたりのインク代が、カートリッジと同じか高くなっています。印刷量がもっと多いお客様なら逆転します。";
+    } else if (r.status === "already") {
+      hero.classList.add("na");
+      heroNum.textContent = "はじめからエコタンクがお得";
+      heroSub.textContent = "本体価格の時点でエコタンクが安いので、買った瞬間から差がつきます。";
+    } else if (r.status === "far") {
+      hero.classList.add("na");
+      heroNum.textContent = "30年以上かかります";
+      heroSub.textContent = "この印刷量だと、カートリッジ機の方が向いています。";
+    } else {
+      var lab = yearsLabel(r.breakeven);
+      heroNum.innerHTML = "約 " + lab.main + '<span class="u">' + lab.unit + "</span>";
+      heroSub.textContent = "これより長く使うほど、エコタンクの方が安くなります。";
+    }
+
+    el("sBody").textContent = r.bodyGap > 0 ? "+" + yen(r.bodyGap) : yen(r.bodyGap);
+    el("sBodyNote").textContent = yen(r.ecoBody) + " − " + yen(r.cartBody);
+
+    el("sInk").innerHTML = yen(r.ecoYearly) + ' <span style="color:var(--ink-muted);font-weight:400">/</span> ' + yen(r.cartYearly);
+    el("sInkNote").textContent = "エコタンク / カートリッジ　（毎年 " + yen(Math.abs(r.yearlyGap)) +
+      (r.yearlyGap >= 0 ? " 節約）" : " 割高）");
+
+    var ten = r.cartTotal(10) - r.ecoTotal(10);
+    var sTen = el("sTen");
+    if (ten > 0) {
+      sTen.className = "stat-v good";
+      sTen.textContent = yen(ten) + " お得";
+    } else {
+      sTen.className = "stat-v";
+      sTen.textContent = yen(-ten) + " 割高";
+    }
+    el("sTenNote").textContent = "10年後の累計 " + yen(r.ecoTotal(10)) + " / " + yen(r.cartTotal(10));
+
+    // 印刷量とエコタンク側のペース
+    el("volumeNote").textContent = r.valid && r.pagesPerYear > 0
+      ? "→ 1年に約 " + Math.round(r.pagesPerYear).toLocaleString("ja-JP") +
+        " 枚の印刷。同じ量ならエコタンクのインク購入は " + paceLabel(r.ecoPerYear) + " です。"
+      : "";
+  }
+
+  // ===== グラフ =====
+  var SVG_W = 760, SVG_H = 380;
+  var PAD = { t: 18, r: 104, b: 40, l: 76 };
+  var plot = {
+    x: PAD.l, y: PAD.t,
+    w: SVG_W - PAD.l - PAD.r,
+    h: SVG_H - PAD.t - PAD.b
+  };
+  var view = null; // 現在の描画スケール（ツールチップ用）
+
+  function niceCeil(v) {
+    if (v <= 0) return 1;
+    var mag = Math.pow(10, Math.floor(Math.log10(v)));
+    var steps = [1, 2, 2.5, 5, 10];
+    for (var i = 0; i < steps.length; i++) {
+      if (v <= steps[i] * mag) return steps[i] * mag;
+    }
+    return 10 * mag;
+  }
+
+  function svgEl(name, attrs) {
+    var n = document.createElementNS("http://www.w3.org/2000/svg", name);
+    for (var k in attrs) { if (attrs[k] !== null) n.setAttribute(k, attrs[k]); }
+    return n;
+  }
+
+  function renderChart(r) {
+    var svg = el("chart");
+    while (svg.childNodes.length > 1) { svg.removeChild(svg.lastChild); }
+
+    // X軸の範囲：交点が入るように、最低10年
+    var xMax = 10;
+    if (r.breakeven && r.breakeven > 0 && r.breakeven <= 30) {
+      xMax = Math.max(10, Math.ceil(r.breakeven * 1.6));
+    }
+    if (xMax > 30) xMax = 30;
+
+    var yMax = niceCeil(Math.max(r.ecoTotal(xMax), r.cartTotal(xMax), 1) * 1.08);
+    var X = function (t) { return plot.x + (t / xMax) * plot.w; };
+    var Y = function (v) { return plot.y + plot.h - (v / yMax) * plot.h; };
+    view = { xMax: xMax, X: X, Y: Y, r: r };
+
+    // --- グリッド＋Y軸ラベル ---
+    var yTicks = 5;
+    for (var i = 0; i <= yTicks; i++) {
+      var v = (yMax / yTicks) * i;
+      var y = Y(v);
+      svg.appendChild(svgEl("line", {
+        x1: plot.x, y1: y, x2: plot.x + plot.w, y2: y,
+        stroke: "var(--grid)", "stroke-width": 1
+      }));
+      var tl = svgEl("text", {
+        x: plot.x - 10, y: y + 4, "text-anchor": "end",
+        fill: "var(--ink-muted)", "font-size": 12, "font-family": "inherit"
+      });
+      tl.style.fontVariantNumeric = "tabular-nums";
+      tl.textContent = yenShort(v) + (v === 0 ? "" : "円");
+      svg.appendChild(tl);
+    }
+
+    // --- X軸ラベル ---
+    var xStep = xMax <= 12 ? 2 : (xMax <= 20 ? 4 : 5);
+    for (var t = 0; t <= xMax; t += xStep) {
+      var xt = svgEl("text", {
+        x: X(t), y: plot.y + plot.h + 22, "text-anchor": "middle",
+        fill: "var(--ink-muted)", "font-size": 12, "font-family": "inherit"
+      });
+      xt.style.fontVariantNumeric = "tabular-nums";
+      xt.textContent = t + "年";
+      svg.appendChild(xt);
+    }
+    svg.appendChild(svgEl("line", {
+      x1: plot.x, y1: plot.y + plot.h, x2: plot.x + plot.w, y2: plot.y + plot.h,
+      stroke: "var(--axis)", "stroke-width": 1
+    }));
+
+    // --- 交点より後ろ：エコタンクが安い領域の目印 ---
+    if (r.status === "ok" && r.breakeven > 0 && r.breakeven < xMax) {
+      svg.appendChild(svgEl("line", {
+        x1: X(r.breakeven), y1: plot.y + 22, x2: X(r.breakeven), y2: plot.y + plot.h,
+        stroke: "var(--good)", "stroke-width": 2, "stroke-dasharray": "5 4", opacity: .75
+      }));
+      var bl = svgEl("text", {
+        x: X(r.breakeven), y: plot.y + 12, "text-anchor": "middle",
+        fill: "var(--good-ink)", "font-size": 12.5, "font-weight": 700, "font-family": "inherit"
+      });
+      var lab = yearsLabel(r.breakeven);
+      bl.textContent = "ここで逆転　" + lab.main + lab.unit;
+      svg.appendChild(bl);
+    }
+
+    // --- 折れ線（直線なので2点でよい） ---
+    var series = [
+      { key: "cart", color: "var(--cart)", name: "カートリッジ", v0: r.cartBody, v1: r.cartTotal(xMax) },
+      { key: "eco",  color: "var(--eco)",  name: "エコタンク",   v0: r.ecoBody,  v1: r.ecoTotal(xMax) }
+    ];
+    series.forEach(function (s) {
+      svg.appendChild(svgEl("line", {
+        x1: X(0), y1: Y(s.v0), x2: X(xMax), y2: Y(s.v1),
+        stroke: s.color, "stroke-width": 2.5, "stroke-linecap": "round"
+      }));
+      // 直接ラベル（線の右端）
+      var dl = svgEl("text", {
+        x: X(xMax) + 9, y: Y(s.v1) + 4,
+        fill: s.color, "font-size": 12.5, "font-weight": 700, "font-family": "inherit"
+      });
+      dl.textContent = s.name;
+      svg.appendChild(dl);
+    });
+
+    // --- 交点マーカー（重なるので surface ring を履かせる） ---
+    if (r.status === "ok" && r.breakeven > 0 && r.breakeven < xMax) {
+      var cx = X(r.breakeven), cy = Y(r.ecoTotal(r.breakeven));
+      svg.appendChild(svgEl("circle", {
+        cx: cx, cy: cy, r: 7,
+        fill: "var(--good)", stroke: "var(--surface)", "stroke-width": 3
+      }));
+    }
+
+    // --- ホバー用の透明レイヤー ---
+    var hoverLine = svgEl("line", {
+      x1: 0, y1: plot.y, x2: 0, y2: plot.y + plot.h,
+      stroke: "var(--axis)", "stroke-width": 1, opacity: 0
+    });
+    svg.appendChild(hoverLine);
+    var dotE = svgEl("circle", { cx: 0, cy: 0, r: 5.5, fill: "var(--eco)", stroke: "var(--surface)", "stroke-width": 2, opacity: 0 });
+    var dotC = svgEl("circle", { cx: 0, cy: 0, r: 5.5, fill: "var(--cart)", stroke: "var(--surface)", "stroke-width": 2, opacity: 0 });
+    svg.appendChild(dotE); svg.appendChild(dotC);
+
+    var hit = svgEl("rect", {
+      x: plot.x, y: plot.y, width: plot.w, height: plot.h,
+      fill: "transparent", style: "cursor:crosshair"
+    });
+    svg.appendChild(hit);
+
+    view.hoverLine = hoverLine; view.dotE = dotE; view.dotC = dotC;
+  }
+
+  // ===== ツールチップ =====
+  function moveTip(clientX, clientY) {
+    if (!view) return;
+    var svg = el("chart"), box = el("chartBox"), tip = el("tip");
+    var rect = svg.getBoundingClientRect();
+    var scale = SVG_W / rect.width;
+    var sx = (clientX - rect.left) * scale;
+    if (sx < plot.x || sx > plot.x + plot.w) { hideTip(); return; }
+
+    var t = ((sx - plot.x) / plot.w) * view.xMax;
+    var r = view.r;
+    var ve = r.ecoTotal(t), vc = r.cartTotal(t);
+    var px = view.X(t);
+
+    view.hoverLine.setAttribute("x1", px);
+    view.hoverLine.setAttribute("x2", px);
+    view.hoverLine.setAttribute("opacity", .9);
+    view.dotE.setAttribute("cx", px); view.dotE.setAttribute("cy", view.Y(ve)); view.dotE.setAttribute("opacity", 1);
+    view.dotC.setAttribute("cx", px); view.dotC.setAttribute("cy", view.Y(vc)); view.dotC.setAttribute("opacity", 1);
+
+    var lab = yearsLabel(t);
+    var diff = vc - ve;
+    tip.innerHTML =
+      '<div class="tip-h">' + (t < 1 / 24 ? "購入時" : lab.main + lab.unit + "後") + "</div>" +
+      '<div class="tip-row"><span class="tip-dot" style="background:var(--eco)"></span>エコタンク<b>' + yen(ve) + "</b></div>" +
+      '<div class="tip-row"><span class="tip-dot" style="background:var(--cart)"></span>カートリッジ<b>' + yen(vc) + "</b></div>" +
+      '<div class="tip-row" style="margin-top:4px">' +
+        (diff >= 0 ? '<span class="good">エコタンクが安い</span><b class="good">' + yen(diff) + "</b>"
+                   : "<span>エコタンクが高い</span><b>" + yen(-diff) + "</b>") +
+      "</div>";
+    tip.classList.add("on");
+
+    // 位置（右端では左に逃がす）
+    var boxRect = box.getBoundingClientRect();
+    var left = (px / scale) + 16;
+    if (left + tip.offsetWidth > boxRect.width - 4) left = (px / scale) - tip.offsetWidth - 16;
+    if (left < 0) left = 0;
+    var top = Math.min(view.Y(Math.max(ve, vc)) / scale, boxRect.height - tip.offsetHeight - 6);
+    tip.style.left = left + "px";
+    tip.style.top = Math.max(0, top) + "px";
+  }
+
+  function hideTip() {
+    var tip = el("tip");
+    tip.classList.remove("on");
+    if (view && view.hoverLine) {
+      view.hoverLine.setAttribute("opacity", 0);
+      view.dotE.setAttribute("opacity", 0);
+      view.dotC.setAttribute("opacity", 0);
+    }
+  }
+
+  // ===== 表 =====
+  function renderTable(r) {
+    var tbody = el("costTable").querySelector("tbody");
+    tbody.innerHTML = "";
+    var rows = 10;
+    for (var t = 0; t <= rows; t++) {
+      var ve = r.ecoTotal(t), vc = r.cartTotal(t), diff = vc - ve;
+      var tr = document.createElement("tr");
+      // 逆転した最初の年に印を付ける
+      if (r.status === "ok" && r.breakeven > t - 1 && r.breakeven <= t) tr.className = "cross";
+      tr.innerHTML =
+        "<td>" + (t === 0 ? "購入時" : t + "年後") + "</td>" +
+        "<td>" + yen(ve) + "</td>" +
+        "<td>" + yen(vc) + "</td>" +
+        "<td" + (diff > 0 ? ' class="good"' : "") + ">" +
+          (diff > 0 ? "エコタンク −" + yen(diff) : diff < 0 ? "エコタンク +" + yen(-diff) : "同額") +
+        "</td>";
+      tbody.appendChild(tr);
+    }
+  }
+
+  // ===== 更新 =====
+  function update() {
+    var r = compute();
+    renderResult(r);
+    renderChart(r);
+    renderTable(r);
+    hideTip();
+  }
+
+  // ===== イベント =====
+  ids.forEach(function (id) {
+    inputs[id].addEventListener("input", function () {
+      // 購入頻度の2つの欄を連動させる
+      if (id === "perYear") {
+        var v = parseFloat(inputs.perYear.value);
+        inputs.everyYears.value = (isFinite(v) && v > 0) ? +(1 / v).toFixed(2) : "";
+      } else if (id === "everyYears") {
+        var e = parseFloat(inputs.everyYears.value);
+        inputs.perYear.value = (isFinite(e) && e > 0) ? +(1 / e).toFixed(2) : "";
+      }
+      update();
+    });
+  });
+
+  el("resetBtn").addEventListener("click", function () {
+    for (var k in DEFAULTS) { inputs[k].value = DEFAULTS[k]; }
+    inputs.everyYears.value = +(1 / DEFAULTS.perYear).toFixed(2);
+    update();
+  });
+
+  el("tableBtn").addEventListener("click", function () {
+    var wrap = el("tableWrap");
+    var open = wrap.hidden;
+    wrap.hidden = !open;
+    this.setAttribute("aria-expanded", String(open));
+    this.textContent = open ? "表を閉じる" : "数値の表を見る";
+  });
+
+  var svg = el("chart");
+  svg.addEventListener("mousemove", function (e) { moveTip(e.clientX, e.clientY); });
+  svg.addEventListener("mouseleave", hideTip);
+  svg.addEventListener("touchstart", function (e) {
+    if (e.touches[0]) moveTip(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  svg.addEventListener("touchmove", function (e) {
+    if (e.touches[0]) moveTip(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  svg.addEventListener("touchend", hideTip);
+  window.addEventListener("resize", hideTip);
+
+  update();
+})();
+</script>
+</body>
+</html>

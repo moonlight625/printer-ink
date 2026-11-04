@@ -117,6 +117,16 @@
   input[type=number]:focus { outline: 2px solid var(--s1); outline-offset: 1px; }
   .unit { font-size: .85rem; color: var(--ink-2); flex: none; }
   .hint { font-size: .75rem; color: var(--ink-muted); margin-top: 3px; }
+  .field-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 3px; }
+  .field-head label { margin-bottom: 0; }
+  .seg { display: inline-flex; border: 1px solid var(--axis); border-radius: 6px; overflow: hidden; flex: none; }
+  .seg button {
+    font: inherit; font-size: .7rem; line-height: 1.2; padding: 3px 7px;
+    border: 0; background: var(--field); color: var(--ink-muted); cursor: pointer;
+  }
+  .seg button + button { border-left: 1px solid var(--axis); }
+  .seg button[aria-pressed=true] { background: var(--ink-2); color: var(--plane); cursor: default; }
+  .seg button:focus-visible { outline: 2px solid var(--s1); outline-offset: -2px; }
 
   .addrow { margin-top: 14px; }
   button.ghost {
@@ -290,7 +300,8 @@
   <ul class="foot">
     <li>印刷枚数は「基準の機種でのインク購入ペース × 1セットの印刷可能枚数」から年間枚数を求め、同じ枚数を各機種で印刷した場合のインク代を比べています。</li>
     <li>本体に付属するインクの分は計算に含めていません（実際は大容量インクの機種が、さらに有利になります）。</li>
-    <li>印刷可能枚数はカタログ値です。写真印刷が多い場合など、使い方によって実際の枚数は変わります。</li>
+    <li>印刷可能枚数・1枚あたりのインク代はカタログ値です。写真印刷が多い場合など、使い方によって実際の枚数は変わります。</li>
+    <li>「1枚あたり」で入力した場合は、セット価格 ÷ 1枚あたりのインク代 を印刷可能枚数として計算しています。</li>
     <li>「逆転するまでの年数」は使用年数とは関係なく計算しています。逆転が使用年数より後になる場合は、総額の欄で割高と出ます。</li>
   </ul>
 
@@ -310,6 +321,9 @@
     { name: "ファーストタンク", body: 24800, ink: 11000, pages: 5000, slot: 3, base: false },
     { name: "カートリッジ",    body: 15800, ink:  5000, pages:  800, slot: 2, base: true  }
   ];
+  // 3つ目の欄の入力方法: "pages" = 1セットの印刷可能枚数, "cpp" = 1枚あたりのインク代
+  // 計算は常に m.pages を使い、cpp 入力のときは pages = ink ÷ cpp に換算する
+  var DEFAULT_MODE = "pages";
   var DEFAULT_PER_YEAR = 1;
   var DEFAULT_USE_YEARS = 5;   // プリンターの寿命の目安
 
@@ -357,8 +371,34 @@
       var m = {};
       for (var k in d) { m[k] = d[k]; }
       m.id = ++uid;
+      m.mode = DEFAULT_MODE;
+      m.cpp = m.pages > 0 ? m.ink / m.pages : 0;
       return m;
     });
+  }
+  // 1枚あたりコストの表示用（細かい値は小数2桁、大きい値は1桁）
+  var cppLabel = function (c) {
+    if (!(c > 0)) return "";
+    return (c < 10 ? +c.toFixed(2) : +c.toFixed(1)).toLocaleString("ja-JP");
+  };
+  // 入力方法に応じて pages / cpp の片方からもう片方を求める
+  function syncMachine(m) {
+    if (m.mode === "cpp") {
+      m.pages = (m.ink > 0 && m.cpp > 0) ? m.ink / m.cpp : 0;
+    } else {
+      m.cpp = (m.ink > 0 && m.pages > 0) ? m.ink / m.pages : 0;
+    }
+  }
+  // 3つ目の欄の下に出す換算の注記
+  function pagesHint(m) {
+    if (m.mode === "cpp") {
+      return m.pages > 0
+        ? "＝ 1セットで約 " + Math.round(m.pages).toLocaleString("ja-JP") + " 枚（セット価格 ÷ 1枚あたりコスト）"
+        : "カタログの「A4カラー文書 1枚あたり約○円」の値";
+    }
+    return m.cpp > 0
+      ? "＝ 1枚あたり約 " + cppLabel(m.cpp) + " 円（セット価格 ÷ 枚数）"
+      : "カタログの「印刷可能枚数」（カラー基準）";
   }
   function baseMachine() {
     for (var i = 0; i < machines.length; i++) { if (machines[i].base) return machines[i]; }
@@ -371,6 +411,7 @@
     var box = el("machines");
     box.className = "machines" + (machines.length === 2 ? " n2" : "");
     box.innerHTML = machines.map(function (m) {
+      var cpp = m.mode === "cpp";
       return '<div class="machine' + (m.base ? " is-base" : "") + '" data-id="' + m.id + '">' +
         (m.base ? '<div class="badge">比較の基準</div>' : "") +
         '<div class="machine-head">' +
@@ -384,9 +425,17 @@
         '<div class="field"><label>インク全色セット価格</label><div class="inputline">' +
           '<input type="number" data-k="ink" value="' + m.ink + '" min="0" step="100" inputmode="numeric"><span class="unit">円</span>' +
         "</div></div>" +
-        '<div class="field"><label>1セットで印刷できる枚数</label><div class="inputline">' +
-          '<input type="number" data-k="pages" value="' + m.pages + '" min="1" step="50" inputmode="numeric"><span class="unit">枚</span>' +
-        '</div><div class="hint">カタログの「印刷可能枚数」（カラー基準）</div></div>' +
+        '<div class="field"><div class="field-head">' +
+          '<label>' + (cpp ? "1枚あたりのインク代" : "1セットで印刷できる枚数") + "</label>" +
+          '<span class="seg" role="group" aria-label="入力方法">' +
+            '<button type="button" data-mode="pages" aria-pressed="' + !cpp + '">枚数</button>' +
+            '<button type="button" data-mode="cpp" aria-pressed="' + cpp + '">1枚あたり</button>' +
+          "</span>" +
+        '</div><div class="inputline">' +
+          (cpp
+            ? '<input type="number" data-k="cpp" value="' + (m.cpp > 0 ? +m.cpp.toFixed(2) : "") + '" min="0" step="0.1" inputmode="decimal"><span class="unit">円/枚</span>'
+            : '<input type="number" data-k="pages" value="' + (m.pages > 0 ? Math.round(m.pages) : "") + '" min="1" step="50" inputmode="numeric"><span class="unit">枚</span>') +
+        '</div><div class="hint" data-hint="pages">' + esc(pagesHint(m)) + "</div></div>" +
       "</div>";
     }).join("");
 
@@ -444,7 +493,7 @@
     vbox.className = "verdicts n" + Math.min(list.length, 2);
     vbox.innerHTML = list.map(function (m) {
       var num, sub, na = "";
-      if (m.status === "invalid") { na = " na"; num = "印刷枚数を入力してください"; sub = ""; }
+      if (m.status === "invalid") { na = " na"; num = "印刷枚数か1枚あたりのインク代を入力してください"; sub = ""; }
       else if (m.status === "never") {
         na = " na"; num = "この条件では元が取れません";
         sub = "1年あたりのインク代が基準の機種と同じか高くなっています。";
@@ -721,7 +770,25 @@
     } else if (k) {
       var v = parseFloat(e.target.value);
       m[k] = isFinite(v) && v >= 0 ? v : 0;
+      syncMachine(m);
+      card.querySelector('[data-hint="pages"]').textContent = pagesHint(m);
     }
+    update();
+  });
+
+  // 枚数 ⇔ 1枚あたりの切り替え
+  el("machines").addEventListener("click", function (e) {
+    var mode = e.target.dataset.mode;
+    if (!mode) return;
+    var card = e.target.closest(".machine");
+    var m = machines.filter(function (x) { return x.id === +card.dataset.id; })[0];
+    if (!m || m.mode === mode) return;
+    syncMachine(m);          // 今の入力値からもう片方を求めてから切り替える
+    m.mode = mode;
+    renderMachines();
+    card = el("machines").querySelector('.machine[data-id="' + m.id + '"]');
+    var input = card && card.querySelector('input[data-k="' + mode + '"]');
+    if (input) input.focus({ preventScroll: true });
     update();
   });
 
@@ -740,7 +807,7 @@
     var base = baseMachine();
     machines.splice(machines.indexOf(base), 0, {
       id: ++uid, name: "新しい機種", slot: slot, base: false,
-      body: base.body, ink: base.ink, pages: base.pages
+      body: base.body, ink: base.ink, pages: base.pages, cpp: base.cpp, mode: base.mode
     });
     renderMachines();
     update();
